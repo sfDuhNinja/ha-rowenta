@@ -1,0 +1,84 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "host": "[%key:common::config_flow::data::host%]"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the robot on your local network."
+        }
+      },
+      "password": {
+        "title": "Password required",
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]"
+        },
+        "data_description": {
+          "password": "8-digit code printed under the dustbin (the QR code there encodes it too)."
+        }
+      },
+      "zeroconf_confirm": {
+        "description": "Do you want to add the Rowenta robot vacuum {name} found at {host} to Home Assistant?"
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]"
+    },
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "docked": {
+        "name": "Robot docked"
+      },
+      "dustbin_present": {
+        "name": "Dustbin present"
+      },
+      "water_tank_present": {
+        "name": "Water tank present"
+      },
+      "water_tank_empty": {
+        "name": "Water tank empty"
+      }
+    },
+    "sensor": {
+      "dustbin_sensor": {
+        "name": "Dustbin dirt level"
+      },
+      "total_cleaning_time": {
+        "name": "Total cleaning time"
+      },
+      "total_number_of_cleaning_runs": {
+        "name": "Total cleaning runs"
+      },
+      "total_area_cleaned": {
+        "name": "Total cleaned area"
+      },
+      "total_distance_driven": {
+        "name": "Total distance driven"
+      }
+    },
+    "vacuum": {
+      "rowenta": {
+        "state_attributes": {
+          "fan_speed": {
+            "state": {
+              "default": "Default",
+              "normal": "[%key:common::state::normal%]",
+              "silent": "Silent",
+              "intensive": "Intensive",
+              "super_silent": "Super silent",
+              "high": "[%key:common::state::high%]",
+              "auto": "[%key:common::state::auto%]"
+            }
+          }
+        }
+      }
+    }
+  }
+}
