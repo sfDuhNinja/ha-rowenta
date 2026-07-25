@@ -15,15 +15,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .coordinator import RowentaConfigEntry, RowentaCoordinator
 from .entity import RowentaEntity
 
+# "dock" is intentionally not exposed here - it's the same signal as the
+# vacuum entity's own DOCKED activity state, so a separate sensor would
+# just duplicate it.
 BINARY_SENSORS: list[BinarySensorEntityDescription] = [
     BinarySensorEntityDescription(
         key="dustbin",
         translation_key="dustbin_present",
-    ),
-    BinarySensorEntityDescription(
-        key="dock",
-        translation_key="docked",
-        device_class=BinarySensorDeviceClass.PLUG,
     ),
     BinarySensorEntityDescription(
         key="water_tank",

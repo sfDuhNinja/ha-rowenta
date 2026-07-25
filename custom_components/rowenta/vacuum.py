@@ -156,7 +156,10 @@ def _activity_from_status(status: dict[str, Any]) -> VacuumActivity | None:
     if mode == "go_home":
         return VacuumActivity.RETURNING
     if mode == "ready":
-        return VacuumActivity.DOCKED if charging == "charging" else VacuumActivity.IDLE
+        # "unconnected" is the only charging value seen while undocked; treat
+        # anything else (e.g. a fully-charged-but-still-docked state we
+        # haven't observed a distinct string for yet) as docked too.
+        return VacuumActivity.IDLE if charging == "unconnected" else VacuumActivity.DOCKED
     if mode == "error":
         return VacuumActivity.ERROR
 

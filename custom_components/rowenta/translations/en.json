@@ -33,9 +33,6 @@
   },
   "entity": {
     "binary_sensor": {
-      "docked": {
-        "name": "Robot docked"
-      },
       "dustbin_present": {
         "name": "Dustbin present"
       },
