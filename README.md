@@ -83,7 +83,11 @@ protocol family:
   and the [openHAB ROMY thread](https://community.openhab.org/t/romy-robot-integration-via-http-binding-austrian-vacuum-robot-highly-recommended/143307)
 
 This is an unofficial, community-reverse-engineered integration. It is not
-affiliated with or endorsed by Groupe SEB, Rowenta, or ROMY Robotics.
+affiliated with or endorsed by Groupe SEB, Rowenta, or ROMY Robotics. The
+bundled icon (`custom_components/rowenta/brand/`) is Rowenta's own logo,
+sourced from rowenta.com and used solely to identify the represented brand,
+per [Home Assistant's brand image guidelines](https://github.com/home-assistant/brands#trademark-legal-notices) —
+its use does not imply endorsement.
 
 ## License
 

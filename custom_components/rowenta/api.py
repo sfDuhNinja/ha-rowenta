@@ -184,18 +184,20 @@ class RowentaClient:
             },
         )
 
-    async def async_clean_map(
-        self, map_id: int, area_ids: list[int], fan_speed: int
-    ) -> None:
-        """Clean one or more rooms on the given map."""
+    async def async_clean_map(self, map_id: int, area_ids: list[int]) -> None:
+        """Clean one or more rooms on the given map.
+
+        Confirmed live: unlike clean_all/clean_start_or_continue, this
+        endpoint rejects cleaning_parameter_set/cleaning_strategy_mode/
+        pump_volume with a parameter_error - each room already carries its
+        own saved power and strategy (visible per-room in get/areas, set
+        through the app) and clean_map just cleans it as configured.
+        """
         await self._request(
             "set/clean_map",
             {
                 "map_id": map_id,
                 "area_ids": ",".join(str(area_id) for area_id in area_ids),
-                "cleaning_parameter_set": fan_speed,
-                "cleaning_strategy_mode": 1,
-                "pump_volume": "none",
             },
         )
 

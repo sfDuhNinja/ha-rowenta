@@ -63,12 +63,7 @@ class RowentaVacuumEntity(RowentaEntity, StateVacuumEntity):
             else None
         )
 
-        mode = status.get("mode")
-        try:
-            self._attr_activity = VacuumActivity(mode) if mode else None
-        except ValueError:
-            LOGGER.debug("Unknown activity reported by robot: %s", mode)
-            self._attr_activity = None
+        self._attr_activity = _activity_from_status(status)
 
         self.async_write_ha_state()
 
@@ -125,7 +120,7 @@ class RowentaVacuumEntity(RowentaEntity, StateVacuumEntity):
             LOGGER.error("Cannot clean rooms: robot reported no active map")
             return
         area_ids = [int(segment_id) for segment_id in segment_ids]
-        await self.client.async_clean_map(map_id, area_ids, self._current_fan_speed_index())
+        await self.client.async_clean_map(map_id, area_ids)
 
     @override
     async def async_send_command(
@@ -142,3 +137,29 @@ class RowentaVacuumEntity(RowentaEntity, StateVacuumEntity):
         """
         query = params if isinstance(params, dict) else None
         await self.client.async_send_command(command, query)
+
+
+def _activity_from_status(status: dict[str, Any]) -> VacuumActivity | None:
+    """Map get/status's mode (+ charging) to a VacuumActivity.
+
+    Confirmed live across a full stop/return/dock cycle: mode is *not* a
+    direct 1:1 match to VacuumActivity's values, unlike genuine ROMY units.
+    "cleaning" and "go_home" (returning to dock) match directly, but a
+    stopped/idle robot and a docked-and-charging one both report the same
+    mode ("ready") - charging is what tells them apart.
+    """
+    mode = status.get("mode")
+    charging = status.get("charging")
+
+    if mode == "cleaning":
+        return VacuumActivity.CLEANING
+    if mode == "go_home":
+        return VacuumActivity.RETURNING
+    if mode == "ready":
+        return VacuumActivity.DOCKED if charging == "charging" else VacuumActivity.IDLE
+    if mode == "error":
+        return VacuumActivity.ERROR
+
+    if mode is not None:
+        LOGGER.debug("Unknown activity mode/charging combo: %s / %s", mode, charging)
+    return None
