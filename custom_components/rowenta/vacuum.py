@@ -25,6 +25,7 @@ SUPPORT_ROWENTA = (
     | VacuumEntityFeature.STATE
     | VacuumEntityFeature.FAN_SPEED
     | VacuumEntityFeature.CLEAN_AREA
+    | VacuumEntityFeature.CLEAN_SPOT
     | VacuumEntityFeature.SEND_COMMAND
 )
 
@@ -103,6 +104,11 @@ class RowentaVacuumEntity(RowentaEntity, StateVacuumEntity):
         await self.client.async_set_fan_speed(FAN_SPEEDS.index(fan_speed))
         self._attr_fan_speed = fan_speed
         self.async_write_ha_state()
+
+    @override
+    async def async_clean_spot(self, **kwargs: Any) -> None:
+        """Spot-clean around the robot's current position."""
+        await self.client.async_clean_spot(self._current_fan_speed_index())
 
     @override
     async def async_get_segments(self) -> list[Segment]:

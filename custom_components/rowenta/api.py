@@ -25,6 +25,13 @@ _LOGGER = logging.getLogger(__name__)
 CANDIDATE_PORTS: tuple[int, ...] = (8080, 10009, 80)
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=8)
 
+# Matches the polling cadence the robot's own local "RobEye" debug UI uses
+# (gui/js/robotRequests.js: requestCommandEndResult) to confirm a command.
+COMMAND_POLL_INTERVAL = 1.0
+COMMAND_POLL_ATTEMPTS = 10
+
+_TERMINAL_FAILED = ("interrupted", "aborted", "error")
+
 
 class RowentaApiError(Exception):
     """Raised when the robot's local API is unreachable or returns an error."""
@@ -161,39 +168,92 @@ class RowentaClient:
         """Rooms/zones for the current map, including the map_id itself."""
         return await self._request("get/areas")
 
+    async def async_get_map_status(self) -> dict[str, Any]:
+        """operation_map_id/active_map_id - equal only once the robot is localized."""
+        return await self._request("get/map_status")
+
+    async def async_get_command_result(self) -> list[dict[str, Any]]:
+        """Recent command outcomes, as {cmd_id, status, error_code}."""
+        result = await self._request("get/command_result")
+        return result.get("commands", [])
+
     # -- commands -------------------------------------------------------
 
+    async def _execute(self, path: str, params: dict[str, Any] | None = None) -> None:
+        """Fire a set/* command and confirm the robot actually accepted it.
+
+        The device answers a set/* call immediately with {"cmd_id": N} before
+        the action itself has run at all; get/command_result reports that
+        command's real outcome shortly after (mirrors the official RobEye
+        debug UI's own requestCommandEndResult()). Confirmed live: for a
+        long-running command (e.g. clean_map) status sits at "executing" for
+        the entire multi-minute clean, only reaching "done" once it's fully
+        finished - so "executing" is treated as success here too, not just
+        "done"/"skipped". Otherwise a service call like vacuum.start would
+        block for the whole cleaning run instead of returning once cleaning
+        has actually started. Raises RowentaApiError if the robot reports
+        the command as interrupted, aborted, or failed; gives up quietly
+        (the command was at least accepted) if nothing shows up within
+        COMMAND_POLL_ATTEMPTS - the result buffer is short, so a slow poller
+        can miss it entirely.
+        """
+        response = await self._request(path, params)
+        cmd_id = response.get("cmd_id")
+        if cmd_id is None:
+            return
+
+        for _ in range(COMMAND_POLL_ATTEMPTS):
+            await asyncio.sleep(COMMAND_POLL_INTERVAL)
+            commands = {c["cmd_id"]: c for c in await self.async_get_command_result()}
+
+            if commands and cmd_id < min(commands):
+                return  # already rotated out of the buffer; assume it went through
+
+            entry = commands.get(cmd_id)
+            if entry is None:
+                continue
+
+            status = entry.get("status")
+            if status in _TERMINAL_FAILED:
+                raise RowentaApiError(f"{path} (cmd_id {cmd_id}) ended as {status!r}: {entry}")
+            if status is not None and status != "queued":
+                return  # "executing", "done", or "skipped" - accepted and running
+
+        _LOGGER.debug("Timed out confirming %s (cmd_id %s); leaving it running", path, cmd_id)
+
     async def async_stop(self) -> None:
-        await self._request("set/stop")
+        await self._execute("set/stop")
 
     async def async_go_home(self) -> None:
-        await self._request("set/go_home")
+        await self._execute("set/go_home")
 
     async def async_clean_start_or_continue(self, fan_speed: int) -> None:
-        await self._request(
+        await self._execute(
             "set/clean_start_or_continue", {"cleaning_parameter_set": fan_speed}
         )
 
     async def async_clean_all(self, fan_speed: int) -> None:
-        await self._request(
+        # Confirmed against the robot's own debug UI source
+        # (gui/js/main.js#onRobButton): only cleaning_parameter_set and
+        # cleaning_strategy_mode are sent for this product line - no
+        # pump_volume (that's a different, mop-capable model family; this
+        # device has no "method" dry/wet option in its own UI either).
+        await self._execute(
             "set/clean_all",
-            {
-                "cleaning_parameter_set": fan_speed,
-                "cleaning_strategy_mode": 1,
-                "pump_volume": "none",
-            },
+            {"cleaning_parameter_set": fan_speed, "cleaning_strategy_mode": 4},
         )
 
     async def async_clean_map(self, map_id: int, area_ids: list[int]) -> None:
         """Clean one or more rooms on the given map.
 
-        Confirmed live: unlike clean_all/clean_start_or_continue, this
-        endpoint rejects cleaning_parameter_set/cleaning_strategy_mode/
-        pump_volume with a parameter_error - each room already carries its
-        own saved power and strategy (visible per-room in get/areas, set
-        through the app) and clean_map just cleans it as configured.
+        Confirmed live and against the debug UI's own source
+        (gui/js/MapFunctions.js): unlike clean_all/clean_start_or_continue,
+        this endpoint only takes map_id and area_ids - each room already
+        carries its own saved power and strategy (visible per-room in
+        get/areas, set through the app) and clean_map just cleans it as
+        configured.
         """
-        await self._request(
+        await self._execute(
             "set/clean_map",
             {
                 "map_id": map_id,
@@ -201,8 +261,32 @@ class RowentaClient:
             },
         )
 
+    async def async_clean_spot(self, fan_speed: int, strategy_mode: int = 4) -> None:
+        """Spot-clean around the robot's current position.
+
+        Confirmed against the debug UI's own source (gui/js/main.js): needs
+        map_id, cleaning_parameter_set and cleaning_strategy_mode - no
+        area_ids. The UI first confirms the robot is actually localized on
+        that map (operation_map_id == active_map_id) before allowing it,
+        since the "spot" is anchored to the robot's current position; this
+        does the same check rather than letting the robot reject a bad call.
+        """
+        map_status = await self.async_get_map_status()
+        operation_map_id = map_status.get("operation_map_id")
+        if operation_map_id is None or operation_map_id != map_status.get("active_map_id"):
+            raise RowentaApiError("Robot is not localized on a map; cannot clean_spot")
+
+        await self._execute(
+            "set/clean_spot",
+            {
+                "map_id": operation_map_id,
+                "cleaning_parameter_set": fan_speed,
+                "cleaning_strategy_mode": strategy_mode,
+            },
+        )
+
     async def async_set_fan_speed(self, fan_speed: int) -> None:
-        await self._request(
+        await self._execute(
             "set/switch_cleaning_parameter_set", {"cleaning_parameter_set": fan_speed}
         )
 
