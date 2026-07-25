@@ -8,6 +8,6 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/sfDuhNinja/ha-rowenta/issues",
   "requirements": [],
-  "version": "0.5.2",
+  "version": "0.6.0",
   "zeroconf": ["_aicu-http._tcp.local."]
 }

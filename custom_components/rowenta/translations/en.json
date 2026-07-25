@@ -61,6 +61,9 @@
       },
       "last_run_duration": {
         "name": "Last run duration"
+      },
+      "current_room": {
+        "name": "Current room"
       }
     },
     "vacuum": {

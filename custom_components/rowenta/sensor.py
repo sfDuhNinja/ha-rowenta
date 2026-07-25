@@ -94,7 +94,7 @@ async def async_setup_entry(
             for description in SENSORS
             if description.key in coordinator.data.sensors
         ]
-        + [RowentaLastRunDurationSensor(coordinator)]
+        + [RowentaLastRunDurationSensor(coordinator), RowentaCurrentRoomSensor(coordinator)]
     )
 
 
@@ -151,3 +151,25 @@ class RowentaLastRunDurationSensor(RowentaEntity, SensorEntity):
             "task_type": last_run["task_type"],
             "ended_at": last_run["ended_at"],
         }
+
+
+class RowentaCurrentRoomSensor(RowentaEntity, SensorEntity):
+    """The room currently being cleaned, from get/task_history's live area_history.
+
+    None (shown as Unknown) while idle/docked/returning - that's accurate,
+    not a bug, for a value that's only meaningful mid-clean. Every change
+    shows up automatically in the Activity/Logbook feed via the state change.
+    """
+
+    _attr_translation_key = "current_room"
+
+    def __init__(self, coordinator: RowentaCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"current_room_{self.client.unique_id}"
+
+    @property
+    @override
+    def native_value(self) -> str | None:
+        """Name of the room currently being cleaned, if any."""
+        return self.coordinator.data.current_room

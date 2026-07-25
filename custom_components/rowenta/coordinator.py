@@ -31,6 +31,7 @@ class RowentaData:
     map_id: int | None = None
     robot_flags: dict[str, list[str]] = field(default_factory=dict)
     last_run: dict[str, Any] | None = None
+    current_room: str | None = None
 
 
 class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
@@ -65,6 +66,7 @@ class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
             raise UpdateFailed(f"Error communicating with Rowenta robot: {err}") from err
 
         binary_sensors, adc_sensors = _parse_sensor_values(sensor_values)
+        rooms = _build_rooms(areas.get("areas", []))
 
         sensors: dict[str, Any] = {
             "battery_level": status.get("battery_level"),
@@ -77,10 +79,11 @@ class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
             status=status,
             sensors=sensors,
             binary_sensors=binary_sensors,
-            rooms=_build_rooms(areas.get("areas", [])),
+            rooms=rooms,
             map_id=areas.get("map_id"),
             robot_flags=robot_flags,
             last_run=_last_cleaning_run(task_history),
+            current_room=_current_room_from_history(task_history, rooms),
         )
 
 
@@ -228,3 +231,27 @@ def _parse_timestamp(value: dict[str, Any] | None) -> datetime | None:
         )
     except (KeyError, ValueError):
         return None
+
+
+def _current_room_from_history(
+    task_history: list[dict[str, Any]], rooms: list[dict[str, Any]]
+) -> str | None:
+    """Room currently being cleaned, from the active task's own area_history.
+
+    Confirmed live: while a task's overall state is "executing", its
+    area_history entries transition pending -> executing -> done/interrupted
+    per room in real time - far more reliable than inferring from position.
+    None while idle/docked, or if the active room isn't one of ours (e.g. a
+    to_be_cleaned proposal, filtered out of `rooms`).
+    """
+    if not task_history or task_history[-1].get("state") != "executing":
+        return None
+
+    room_names = {room["id"]: room["name"] for room in rooms}
+    for area in task_history[-1].get("area_history", []):
+        if area.get("state") == "executing":
+            room_name = room_names.get(area.get("area_id"))
+            if room_name:
+                return room_name
+
+    return None
