@@ -53,7 +53,7 @@ class RowentaConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(client.unique_id)
                 self._abort_if_unique_id_configured()
-                self.robot_name = client.user_name or client.name
+                self.robot_name = client.display_name
 
                 if not client.is_unlocked:
                     return await self.async_step_password()
@@ -101,7 +101,7 @@ class RowentaConfigFlow(ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(client.unique_id)
         self._abort_if_unique_id_configured(updates={CONF_HOST: self.host})
 
-        self.robot_name = client.user_name or client.name
+        self.robot_name = client.display_name
         self.context.update(
             {
                 "title_placeholders": {"name": f"{self.robot_name} ({self.host})"},
@@ -131,6 +131,6 @@ class RowentaConfigFlow(ConfigFlow, domain=DOMAIN):
     def _finish(self, client: RowentaClient) -> ConfigFlowResult:
         """Create the config entry."""
         return self.async_create_entry(
-            title=self.robot_name or client.name,
+            title=self.robot_name or client.display_name,
             data={CONF_HOST: self.host, CONF_PASSWORD: self.password},
         )

@@ -129,6 +129,16 @@ def _build_rooms(areas: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     rooms = [area for area in areas if area.get("area_type") == "room"]
 
+    # room_type "none" marks stale/proposed splits the robot has never
+    # actually cleaned (area_state "inactive", cleaning_counter 0, never
+    # last_cleaned) rather than real user-facing rooms - the app doesn't
+    # show them either. Keep one only if the user has explicitly named it.
+    rooms = [
+        room
+        for room in rooms
+        if room.get("room_type", "none") != "none" or _room_custom_name(room)
+    ]
+
     type_totals: dict[str, int] = {}
     for room in rooms:
         room_type = room.get("room_type", "none")
@@ -137,12 +147,7 @@ def _build_rooms(areas: list[dict[str, Any]]) -> list[dict[str, Any]]:
     type_seen: dict[str, int] = {}
     result: list[dict[str, Any]] = []
     for room in rooms:
-        try:
-            meta = json.loads(room.get("area_meta_data") or "{}")
-        except ValueError:
-            meta = {}
-
-        custom_name = meta.get("name")
+        custom_name = _room_custom_name(room)
         room_type = room.get("room_type", "none")
 
         if custom_name:
@@ -159,3 +164,12 @@ def _build_rooms(areas: list[dict[str, Any]]) -> list[dict[str, Any]]:
         result.append({"id": room["id"], "name": name})
 
     return result
+
+
+def _room_custom_name(room: dict[str, Any]) -> str | None:
+    """Return the user-set name from a room's area_meta_data, if any."""
+    try:
+        meta = json.loads(room.get("area_meta_data") or "{}")
+    except ValueError:
+        return None
+    return meta.get("name") or None

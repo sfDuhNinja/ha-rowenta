@@ -21,7 +21,7 @@ class RowentaEntity(CoordinatorEntity[RowentaCoordinator]):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self.client.unique_id)},
             manufacturer="Rowenta",
-            name=self.client.user_name or self.client.name,
-            model=self.client.model,
+            name=self.client.display_name,
+            model=self.client.friendly_model or self.client.model,
             sw_version=self.client.firmware,
         )

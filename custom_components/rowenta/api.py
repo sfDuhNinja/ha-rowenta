@@ -16,6 +16,8 @@ from typing import Any
 
 import aiohttp
 
+from .const import FIRMWARE_MODEL_NAMES
+
 _LOGGER = logging.getLogger(__name__)
 
 # The device answers on whichever of these is open; ROMY-protocol robots
@@ -46,6 +48,20 @@ class RowentaClient:
         self.user_name: str = ""
         self.model: str = ""
         self.firmware: str = ""
+        self.friendly_model: str = ""
+
+    @property
+    def display_name(self) -> str:
+        """Best name to show for this robot.
+
+        Prefers a nickname the user actually set in the app; falls back to
+        the retail model name rather than the firmware's internal codename
+        (get/robot_name reports that codename verbatim until the user
+        renames the robot, so it can't be trusted as "user-set" on its own).
+        """
+        if self.user_name and self.user_name != self.name:
+            return self.user_name
+        return self.friendly_model or self.model or self.name or "Rowenta Robot Vacuum"
 
     async def async_connect(self) -> bool:
         """Find the reachable port, unlock if needed, and load robot identity.
@@ -87,6 +103,7 @@ class RowentaClient:
             self.model = robot_id.get("model", "")
             self.firmware = robot_id.get("firmware", "")
             self.name = robot_id.get("name") or self.model or "Rowenta Robot"
+            self.friendly_model = _friendly_model_name(self.firmware)
 
             robot_name = await self._request("get/robot_name")
             self.user_name = robot_name.get("name", "")
@@ -196,3 +213,13 @@ class RowentaClient:
         "get/maps" - with or without a leading slash.
         """
         return await self._request(command.lstrip("/"), params)
+
+
+def _friendly_model_name(firmware: str) -> str:
+    """Map a firmware string's series prefix to a retail model name.
+
+    Firmware looks like "SER120-1.1.0-release:3.11.2872"; the part before
+    the first "-" is the series code.
+    """
+    series = firmware.split("-", 1)[0] if firmware else ""
+    return FIRMWARE_MODEL_NAMES.get(series, "")
