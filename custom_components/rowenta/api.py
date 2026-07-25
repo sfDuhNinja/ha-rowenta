@@ -177,6 +177,16 @@ class RowentaClient:
         result = await self._request("get/command_result")
         return result.get("commands", [])
 
+    async def async_get_robot_flags(self) -> dict[str, list[str]]:
+        """Active error/not_ready/notification flags (stuck component, full dustbin, etc.).
+
+        IDs match the robot's own factory debug UI vocabulary (e.g.
+        "stuck_wheel", "stuck_main_brush", "dustbin_missing",
+        "dustbin_full", "lifted", "toplid_open") - it documents them as
+        sourced from the manufacturer's internal protocol spec.
+        """
+        return await self._request("get/robot_flags")
+
     # -- commands -------------------------------------------------------
 
     async def _execute(self, path: str, params: dict[str, Any] | None = None) -> None:

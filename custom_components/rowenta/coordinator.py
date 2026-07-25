@@ -28,6 +28,7 @@ class RowentaData:
     binary_sensors: dict[str, bool] = field(default_factory=dict)
     rooms: list[dict[str, Any]] = field(default_factory=list)
     map_id: int | None = None
+    robot_flags: dict[str, list[str]] = field(default_factory=dict)
 
 
 class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
@@ -56,6 +57,7 @@ class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
             statistics = await self.client.async_get_statistics()
             sensor_values = await self.client.async_get_sensor_values()
             areas = await self.client.async_get_areas()
+            robot_flags = await self.client.async_get_robot_flags()
         except RowentaApiError as err:
             raise UpdateFailed(f"Error communicating with Rowenta robot: {err}") from err
 
@@ -74,6 +76,7 @@ class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
             binary_sensors=binary_sensors,
             rooms=_build_rooms(areas.get("areas", [])),
             map_id=areas.get("map_id"),
+            robot_flags=robot_flags,
         )
 
 

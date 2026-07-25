@@ -41,6 +41,9 @@
       },
       "water_tank_empty": {
         "name": "Water tank empty"
+      },
+      "problem": {
+        "name": "Problem"
       }
     },
     "sensor": {
