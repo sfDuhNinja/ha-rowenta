@@ -172,7 +172,23 @@ def _activity_from_status(status: dict[str, Any]) -> VacuumActivity | None:
         return VacuumActivity.CLEANING
     if mode in ("go_home", "target_point"):
         return VacuumActivity.RETURNING
-    if mode in ("error", "not_ready", "recovery", "lifted"):
+    if mode in (
+        "error",
+        "not_ready",
+        "recovery",
+        "lifted",
+        "pairing",
+        "direct_control",
+        "unknown",
+    ):
+        # The debug UI's own updateStatus() styles this whole group - plus
+        # not_ready/recovery/lifted above - identically as "not ready", with
+        # no visual distinction between them. Confirmed live: a real user
+        # (via the app, not this integration) can trigger "direct_control"
+        # by manually driving the robot, and the robot logs "lifted" when
+        # physically picked up - neither is a true error, but ERROR is the
+        # closest fit in VacuumActivity and beats silently showing Unknown
+        # for a real, non-idle condition.
         return VacuumActivity.ERROR
     if mode == "ready":
         # "unconnected" is the only charging value seen while undocked; treat
@@ -180,8 +196,7 @@ def _activity_from_status(status: dict[str, Any]) -> VacuumActivity | None:
         # haven't observed a distinct string for yet) as docked too.
         return VacuumActivity.IDLE if charging == "unconnected" else VacuumActivity.DOCKED
 
-    # "pairing"/"direct_control"/"unknown" are setup/factory-test states with
-    # no sensible VacuumActivity equivalent - shown as Unknown rather than
+    # Anything else is a genuinely new/unseen mode string - shown as Unknown rather than
     # forced into a misleading one.
     if mode is not None:
         LOGGER.debug("Unmapped activity mode/charging combo: %s / %s", mode, charging)
