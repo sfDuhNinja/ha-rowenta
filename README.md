@@ -1,5 +1,7 @@
 # Rowenta Robot Vacuum for Home Assistant
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=sfDuhNinja&repository=ha-rowenta&category=integration)
+
 Custom integration for Rowenta X-Plorer robot vacuums (confirmed on the
 **Series 120 AI**, firmware `SER120-*`) that talk the same local
 "RobEye"/ROMY-protocol HTTP API as ROMY-branded robots and other
@@ -36,8 +38,14 @@ required parameters are undocumented and unconfirmed).
 
 ### HACS
 
+Click the badge above — it opens your Home Assistant instance straight to
+the "add custom repository" dialog (requires [My Home Assistant](https://www.home-assistant.io/integrations/my/)
+to be linked to this HA instance, on by default).
+
+Or add it manually:
+
 1. HACS → the 3-dot menu → **Custom repositories**
-2. Add this repository URL, category **Integration**
+2. Add `https://github.com/sfDuhNinja/ha-rowenta`, category **Integration**
 3. Install **Rowenta Robot Vacuum**, then restart Home Assistant
 
 ### Manual
