@@ -31,7 +31,7 @@ class RowentaData:
     map_id: int | None = None
     robot_flags: dict[str, list[str]] = field(default_factory=dict)
     last_run: dict[str, Any] | None = None
-    current_room: str | None = None
+    current_area_id: int | None = None
 
 
 class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
@@ -83,7 +83,7 @@ class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
             map_id=areas.get("map_id"),
             robot_flags=robot_flags,
             last_run=_last_cleaning_run(task_history),
-            current_room=_current_room_from_history(task_history, rooms),
+            current_area_id=_current_area_id_from_history(task_history, rooms),
         )
 
 
@@ -233,25 +233,30 @@ def _parse_timestamp(value: dict[str, Any] | None) -> datetime | None:
         return None
 
 
-def _current_room_from_history(
+def _current_area_id_from_history(
     task_history: list[dict[str, Any]], rooms: list[dict[str, Any]]
-) -> str | None:
-    """Room currently being cleaned, from the active task's own area_history.
+) -> int | None:
+    """Segment id currently being cleaned, from the active task's own area_history.
 
     Confirmed live: while a task's overall state is "executing", its
     area_history entries transition pending -> executing -> done/interrupted
     per room in real time - far more reliable than inferring from position.
-    None while idle/docked, or if the active room isn't one of ours (e.g. a
-    to_be_cleaned proposal, filtered out of `rooms`).
+    None while idle/docked, or if the active segment isn't one of ours (e.g.
+    a to_be_cleaned proposal, filtered out of `rooms`).
+
+    Returns the raw segment id rather than a resolved name - the entity
+    resolves it through the user's own HA area mapping instead of our
+    generated segment name (id resolution needs the entity registry, not
+    available here in the coordinator).
     """
     if not task_history or task_history[-1].get("state") != "executing":
         return None
 
-    room_names = {room["id"]: room["name"] for room in rooms}
+    room_ids = {room["id"] for room in rooms}
     for area in task_history[-1].get("area_history", []):
-        if area.get("state") == "executing":
-            room_name = room_names.get(area.get("area_id"))
-            if room_name:
-                return room_name
+        if area.get("state") == "executing" and area.get("area_id") in room_ids:
+            return area["area_id"]
+
+    return None
 
     return None

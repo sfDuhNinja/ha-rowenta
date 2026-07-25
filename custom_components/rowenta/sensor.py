@@ -15,6 +15,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
+from homeassistant.components.vacuum import DOMAIN as VACUUM_DOMAIN
 from homeassistant.const import (
     PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
@@ -24,8 +25,10 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import DOMAIN
 from .coordinator import RowentaConfigEntry, RowentaCoordinator
 from .entity import RowentaEntity
 
@@ -154,11 +157,16 @@ class RowentaLastRunDurationSensor(RowentaEntity, SensorEntity):
 
 
 class RowentaCurrentRoomSensor(RowentaEntity, SensorEntity):
-    """The room currently being cleaned, from get/task_history's live area_history.
+    """The HA area currently being cleaned, from get/task_history's live area_history.
 
-    None (shown as Unknown) while idle/docked/returning - that's accurate,
-    not a bug, for a value that's only meaningful mid-clean. Every change
-    shows up automatically in the Activity/Logbook feed via the state change.
+    Resolves through the vacuum entity's own area_mapping (set via HA's
+    "map vacuum segments to areas" dialog, the same one CLEAN_AREA/
+    vacuum.clean_area uses) rather than this integration's own generated
+    segment name - shows exactly the area name the user assigned (e.g.
+    "Sufragerie"), not our guess at what the segment's room_type is called.
+
+    None (shown as Unknown) while idle/docked/returning, or if the current
+    segment hasn't been mapped to an HA area yet - both accurate, not bugs.
     """
 
     _attr_translation_key = "current_room"
@@ -171,5 +179,37 @@ class RowentaCurrentRoomSensor(RowentaEntity, SensorEntity):
     @property
     @override
     def native_value(self) -> str | None:
-        """Name of the room currently being cleaned, if any."""
-        return self.coordinator.data.current_room
+        """Name of the HA area the currently-cleaning segment is mapped to."""
+        area_id = self.coordinator.data.current_area_id
+        if area_id is None:
+            return None
+
+        entity_registry = er.async_get(self.hass)
+        vacuum_entity_id = entity_registry.async_get_entity_id(
+            VACUUM_DOMAIN, DOMAIN, self.client.unique_id
+        )
+        vacuum_entry = (
+            entity_registry.async_get(vacuum_entity_id) if vacuum_entity_id else None
+        )
+        if vacuum_entry is None:
+            return None
+
+        # Registry options are namespaced by the domain that owns them - HA's
+        # own vacuum platform writes area_mapping under "vacuum", not under
+        # this integration's own DOMAIN ("rowenta").
+        area_mapping: dict[str, list[str]] = vacuum_entry.options.get(
+            VACUUM_DOMAIN, {}
+        ).get("area_mapping", {})
+        ha_area_id = next(
+            (
+                aid
+                for aid, segment_ids in area_mapping.items()
+                if str(area_id) in segment_ids
+            ),
+            None,
+        )
+        if ha_area_id is None:
+            return None  # this segment hasn't been mapped to an HA area yet
+
+        area = ar.async_get(self.hass).async_get_area(ha_area_id)
+        return area.name if area else None
