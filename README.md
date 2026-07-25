@@ -23,7 +23,7 @@ directly to the robot over your LAN.
 | Start / resume | `set/clean_start_or_continue` |
 | Stop / Pause | `set/stop` |
 | Return to dock | `set/go_home` |
-| Fan speed (default/normal/silent/intensive/super_silent) | `set/switch_cleaning_parameter_set` |
+| Fan speed (Silent/Eco/Normal/Boost, matching the app) | `set/switch_cleaning_parameter_set` |
 | Clean specific room(s) (`vacuum.clean_area`) | `set/clean_map` |
 | Spot-clean current position (`vacuum.clean_spot`) | `set/clean_spot` |
 | Raw command passthrough (`vacuum.send_command`) | any `get/*` or `set/*` endpoint |

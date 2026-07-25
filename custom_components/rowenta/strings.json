@@ -73,9 +73,9 @@
             "state": {
               "default": "Default",
               "normal": "[%key:common::state::normal%]",
-              "silent": "Silent",
-              "intensive": "Intensive",
-              "super_silent": "Super silent"
+              "eco": "Eco",
+              "boost": "Boost",
+              "silent": "Silent"
             }
           }
         }
