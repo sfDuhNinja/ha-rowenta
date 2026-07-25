@@ -153,22 +153,36 @@ def _activity_from_status(status: dict[str, Any]) -> VacuumActivity | None:
     "cleaning" and "go_home" (returning to dock) match directly, but a
     stopped/idle robot and a docked-and-charging one both report the same
     mode ("ready") - charging is what tells them apart.
+
+    The fuller mode vocabulary ("exploring", "target_point", "not_ready",
+    "recovery", "lifted", "pairing", "direct_control", "unknown") comes from
+    the robot's own factory debug UI (gui/js/main.js's updateStatus(),
+    which switches on these exact values to color-code its status label).
+    Critically, this firmware appears to never actually use the literal
+    string "error" - real problems show up as "not_ready"/"recovery"/
+    "lifted" instead. Home Assistant's native "vacuum cleaner encountered
+    an error" automation trigger fires off VacuumActivity.ERROR alone, so
+    without mapping these too, that trigger would silently never fire on
+    this robot even while get/robot_flags reports a real fault.
     """
     mode = status.get("mode")
     charging = status.get("charging")
 
-    if mode == "cleaning":
+    if mode in ("cleaning", "exploring"):
         return VacuumActivity.CLEANING
-    if mode == "go_home":
+    if mode in ("go_home", "target_point"):
         return VacuumActivity.RETURNING
+    if mode in ("error", "not_ready", "recovery", "lifted"):
+        return VacuumActivity.ERROR
     if mode == "ready":
         # "unconnected" is the only charging value seen while undocked; treat
         # anything else (e.g. a fully-charged-but-still-docked state we
         # haven't observed a distinct string for yet) as docked too.
         return VacuumActivity.IDLE if charging == "unconnected" else VacuumActivity.DOCKED
-    if mode == "error":
-        return VacuumActivity.ERROR
 
+    # "pairing"/"direct_control"/"unknown" are setup/factory-test states with
+    # no sensible VacuumActivity equivalent - shown as Unknown rather than
+    # forced into a misleading one.
     if mode is not None:
-        LOGGER.debug("Unknown activity mode/charging combo: %s / %s", mode, charging)
+        LOGGER.debug("Unmapped activity mode/charging combo: %s / %s", mode, charging)
     return None
