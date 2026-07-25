@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 import json
 from typing import Any
 
@@ -29,6 +30,7 @@ class RowentaData:
     rooms: list[dict[str, Any]] = field(default_factory=list)
     map_id: int | None = None
     robot_flags: dict[str, list[str]] = field(default_factory=dict)
+    last_run: dict[str, Any] | None = None
 
 
 class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
@@ -58,6 +60,7 @@ class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
             sensor_values = await self.client.async_get_sensor_values()
             areas = await self.client.async_get_areas()
             robot_flags = await self.client.async_get_robot_flags()
+            task_history = await self.client.async_get_task_history()
         except RowentaApiError as err:
             raise UpdateFailed(f"Error communicating with Rowenta robot: {err}") from err
 
@@ -77,6 +80,7 @@ class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
             rooms=_build_rooms(areas.get("areas", [])),
             map_id=areas.get("map_id"),
             robot_flags=robot_flags,
+            last_run=_last_cleaning_run(task_history),
         )
 
 
@@ -176,3 +180,51 @@ def _room_custom_name(room: dict[str, Any]) -> str | None:
     except ValueError:
         return None
     return meta.get("name") or None
+
+
+_CLEANING_TASK_TYPES = {"clean_map", "clean_all", "clean_spot", "clean_start_or_continue"}
+
+
+def _last_cleaning_run(task_history: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Duration/outcome of the most recent actual cleaning task.
+
+    task_history is oldest-first and mixes cleaning tasks with go_home/other
+    housekeeping tasks, so the last entry isn't necessarily a clean - filter
+    to cleaning task types first. Returns None if the robot has no cleaning
+    history yet.
+    """
+    cleaning_tasks = [
+        task for task in task_history if task.get("task_type") in _CLEANING_TASK_TYPES
+    ]
+    if not cleaning_tasks:
+        return None
+
+    task = cleaning_tasks[-1]
+    start = _parse_timestamp(task.get("start_time"))
+    end = _parse_timestamp(task.get("end_time"))
+    duration_minutes = round((end - start).total_seconds() / 60, 1) if start and end else None
+
+    return {
+        "duration_minutes": duration_minutes,
+        "area_cleaned": round(task.get("area", 0) / 64, 2),
+        "state": task.get("state"),
+        "task_type": task.get("task_type"),
+        "ended_at": end,
+    }
+
+
+def _parse_timestamp(value: dict[str, Any] | None) -> datetime | None:
+    """Convert a {year, month, day, hour, min, sec} dict to a datetime."""
+    if not value:
+        return None
+    try:
+        return datetime(
+            value["year"],
+            value["month"],
+            value["day"],
+            value["hour"],
+            value["min"],
+            value["sec"],
+        )
+    except (KeyError, ValueError):
+        return None

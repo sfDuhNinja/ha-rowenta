@@ -172,6 +172,11 @@ class RowentaClient:
         """operation_map_id/active_map_id - equal only once the robot is localized."""
         return await self._request("get/map_status")
 
+    async def async_get_task_history(self) -> list[dict[str, Any]]:
+        """Past cleaning/go_home tasks, oldest first, each with start/end time."""
+        result = await self._request("get/task_history")
+        return result.get("task_history", [])
+
     async def async_get_command_result(self) -> list[dict[str, Any]]:
         """Recent command outcomes, as {cmd_id, status, error_code}."""
         result = await self._request("get/command_result")

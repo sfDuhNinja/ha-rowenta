@@ -33,9 +33,6 @@
   },
   "entity": {
     "binary_sensor": {
-      "dustbin_present": {
-        "name": "Dustbin present"
-      },
       "water_tank_present": {
         "name": "Water tank present"
       },
@@ -61,6 +58,9 @@
       },
       "total_distance_driven": {
         "name": "Total distance driven"
+      },
+      "last_run_duration": {
+        "name": "Last run duration"
       }
     },
     "vacuum": {

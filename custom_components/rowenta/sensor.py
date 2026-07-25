@@ -89,9 +89,12 @@ async def async_setup_entry(
     """Set up Rowenta sensors, skipping any the robot doesn't report."""
     coordinator = config_entry.runtime_data
     async_add_entities(
-        RowentaSensor(coordinator, description)
-        for description in SENSORS
-        if description.key in coordinator.data.sensors
+        [
+            RowentaSensor(coordinator, description)
+            for description in SENSORS
+            if description.key in coordinator.data.sensors
+        ]
+        + [RowentaLastRunDurationSensor(coordinator)]
     )
 
 
@@ -113,3 +116,38 @@ class RowentaSensor(RowentaEntity, SensorEntity):
     def native_value(self) -> float | int | None:
         """Return the current value from the coordinator's last poll."""
         return self.coordinator.data.sensors.get(self.entity_description.key)
+
+
+class RowentaLastRunDurationSensor(RowentaEntity, SensorEntity):
+    """How long the most recent actual cleaning run took, from get/task_history."""
+
+    _attr_translation_key = "last_run_duration"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: RowentaCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"last_run_duration_{self.client.unique_id}"
+
+    @property
+    @override
+    def native_value(self) -> float | None:
+        """Duration in minutes of the most recent clean_map/clean_all/clean_spot task."""
+        last_run = self.coordinator.data.last_run
+        return last_run["duration_minutes"] if last_run else None
+
+    @property
+    @override
+    def extra_state_attributes(self) -> dict[str, object]:
+        """Area cleaned, outcome, task type and end time of that same run."""
+        last_run = self.coordinator.data.last_run
+        if not last_run:
+            return {}
+        return {
+            "area_cleaned_m2": last_run["area_cleaned"],
+            "state": last_run["state"],
+            "task_type": last_run["task_type"],
+            "ended_at": last_run["ended_at"],
+        }

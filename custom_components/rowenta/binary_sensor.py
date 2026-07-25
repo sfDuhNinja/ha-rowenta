@@ -18,12 +18,8 @@ from .entity import RowentaEntity
 
 # "dock" is intentionally not exposed here - it's the same signal as the
 # vacuum entity's own DOCKED activity state, so a separate sensor would
-# just duplicate it.
+# just duplicate it. "dustbin" (present/missing) dropped by request.
 BINARY_SENSORS: list[BinarySensorEntityDescription] = [
-    BinarySensorEntityDescription(
-        key="dustbin",
-        translation_key="dustbin_present",
-    ),
     BinarySensorEntityDescription(
         key="water_tank",
         translation_key="water_tank_present",
