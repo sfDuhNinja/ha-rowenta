@@ -195,6 +195,27 @@ class RowentaClient:
     # -- commands -------------------------------------------------------
 
     async def _execute(self, path: str, params: dict[str, Any] | None = None) -> None:
+        """Fire a set/* command, confirm it, and retry once if instantly rejected.
+
+        Confirmed live: sending a command while the robot is still mid-
+        transition from a just-interrupted previous command (e.g. a
+        clean_map arriving seconds after an interrupted go_home) gets
+        rejected outright - the robot reports it "interrupted" with 0
+        duration, without ever actually starting. Retrying the exact same
+        call moments later succeeds once the robot has settled. That one
+        retry is only attempted for this specific instant-rejection case;
+        a command that fails after having actually started running is a
+        real failure and raises immediately, no retry.
+        """
+        if await self._execute_once(path, params):
+            return
+        _LOGGER.debug("%s rejected instantly, retrying once", path)
+        await asyncio.sleep(COMMAND_POLL_INTERVAL)
+        if await self._execute_once(path, params):
+            return
+        raise RowentaApiError(f"{path} was rejected immediately, twice in a row")
+
+    async def _execute_once(self, path: str, params: dict[str, Any] | None = None) -> bool:
         """Fire a set/* command and confirm the robot actually accepted it.
 
         The device answers a set/* call immediately with {"cmd_id": N} before
@@ -206,23 +227,28 @@ class RowentaClient:
         finished - so "executing" is treated as success here too, not just
         "done"/"skipped". Otherwise a service call like vacuum.start would
         block for the whole cleaning run instead of returning once cleaning
-        has actually started. Raises RowentaApiError if the robot reports
-        the command as interrupted, aborted, or failed; gives up quietly
-        (the command was at least accepted) if nothing shows up within
-        COMMAND_POLL_ATTEMPTS - the result buffer is short, so a slow poller
-        can miss it entirely.
+        has actually started.
+
+        Returns True on success. Returns False only for an instant rejection
+        on the very first poll, before the command ever reached "executing"
+        - the case _execute() retries once. Raises RowentaApiError for a
+        failure after the command had actually started running. Gives up
+        quietly (returns True; the command was at least accepted) if
+        nothing shows up within COMMAND_POLL_ATTEMPTS - the result buffer is
+        short, so a slow poller can miss it entirely.
         """
         response = await self._request(path, params)
         cmd_id = response.get("cmd_id")
         if cmd_id is None:
-            return
+            return True
 
-        for _ in range(COMMAND_POLL_ATTEMPTS):
+        ever_ran = False
+        for attempt in range(COMMAND_POLL_ATTEMPTS):
             await asyncio.sleep(COMMAND_POLL_INTERVAL)
             commands = {c["cmd_id"]: c for c in await self.async_get_command_result()}
 
             if commands and cmd_id < min(commands):
-                return  # already rotated out of the buffer; assume it went through
+                return True  # already rotated out of the buffer; assume it went through
 
             entry = commands.get(cmd_id)
             if entry is None:
@@ -230,11 +256,16 @@ class RowentaClient:
 
             status = entry.get("status")
             if status in _TERMINAL_FAILED:
+                if not ever_ran and attempt == 0:
+                    return False
                 raise RowentaApiError(f"{path} (cmd_id {cmd_id}) ended as {status!r}: {entry}")
-            if status is not None and status != "queued":
-                return  # "executing", "done", or "skipped" - accepted and running
+            if status == "queued":
+                continue
+            ever_ran = True
+            return True
 
         _LOGGER.debug("Timed out confirming %s (cmd_id %s); leaving it running", path, cmd_id)
+        return True
 
     async def async_stop(self) -> None:
         await self._execute("set/stop")
