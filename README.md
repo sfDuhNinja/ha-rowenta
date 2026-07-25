@@ -23,16 +23,24 @@ directly to the robot over your LAN.
 | Start / resume | `set/clean_start_or_continue` |
 | Stop / Pause | `set/stop` |
 | Return to dock | `set/go_home` |
-| Fan speed (default/normal/silent/intensive/super_silent/high/auto) | `set/switch_cleaning_parameter_set` |
+| Fan speed (default/normal/silent/intensive/super_silent) | `set/switch_cleaning_parameter_set` |
 | Clean specific room(s) (`vacuum.clean_area`) | `set/clean_map` |
+| Spot-clean current position (`vacuum.clean_spot`) | `set/clean_spot` |
 | Raw command passthrough (`vacuum.send_command`) | any `get/*` or `set/*` endpoint |
+| Commands confirmed via the robot's own result tracking, not just fired-and-assumed | `get/command_result` |
 | Battery, distance, area cleaned, run count, dustbin dirt level | `get/status`, `get/statistics`, `get/sensor_values` |
-| Dustbin / dock / water tank binary sensors | `get/sensor_values` |
+| Dustbin / water tank binary sensors | `get/sensor_values` |
+| Problem sensor (stuck wheel/brush/fan, dustbin missing, lifted, etc.) | `get/robot_flags` |
 | Auto-discovery | `_aicu-http._tcp.local.` mDNS |
 
-**Not implemented:** `LOCATE` (no such endpoint exists on this firmware —
-confirmed by probing) and `CLEAN_SPOT` (the endpoint exists but its
-required parameters are undocumented and unconfirmed).
+Docked state is covered by the vacuum entity's own activity (no separate
+"docked" sensor needed).
+
+**Not implemented:** `LOCATE` — no such endpoint exists on this firmware,
+confirmed by probing every plausible name. `MAP` (live map image) would
+need a companion `camera` entity rendering `get/cleaning_grid_map`, which
+is a fair bit more work than the rest of this list; open an issue if you
+want it.
 
 ## Installation
 
@@ -88,6 +96,11 @@ bundled icon (`custom_components/rowenta/brand/`) is Rowenta's own logo,
 sourced from rowenta.com and used solely to identify the represented brand,
 per [Home Assistant's brand image guidelines](https://github.com/home-assistant/brands#trademark-legal-notices) —
 its use does not imply endorsement.
+
+Built by [sfDuhNinja](https://github.com/sfDuhNinja) with
+[Claude](https://claude.com/claude-code) (Anthropic) as co-author — from the
+initial live protocol reverse-engineering through every fix since. Commits
+carry a `Co-Authored-By: Claude` trailer accordingly.
 
 ## License
 

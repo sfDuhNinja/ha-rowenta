@@ -72,9 +72,7 @@
               "normal": "[%key:common::state::normal%]",
               "silent": "Silent",
               "intensive": "Intensive",
-              "super_silent": "Super silent",
-              "high": "[%key:common::state::high%]",
-              "auto": "[%key:common::state::auto%]"
+              "super_silent": "Super silent"
             }
           }
         }

@@ -13,7 +13,7 @@ from homeassistant.components.vacuum import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import FAN_SPEEDS, LOGGER
+from .const import FAN_SPEEDS, LOGGER, SELECTABLE_FAN_SPEEDS
 from .coordinator import RowentaConfigEntry, RowentaCoordinator
 from .entity import RowentaEntity
 
@@ -43,7 +43,7 @@ class RowentaVacuumEntity(RowentaEntity, StateVacuumEntity):
     """Representation of a Rowenta robot vacuum."""
 
     _attr_supported_features = SUPPORT_ROWENTA
-    _attr_fan_speed_list = list(FAN_SPEEDS)
+    _attr_fan_speed_list = list(SELECTABLE_FAN_SPEEDS)
     _attr_name = None
 
     def __init__(self, coordinator: RowentaCoordinator) -> None:

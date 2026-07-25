@@ -10,17 +10,26 @@ LOGGER = logging.getLogger(__package__)
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.VACUUM]
 UPDATE_INTERVAL = timedelta(seconds=10)
 
-# Index == cleaning_parameter_set value on the device. Confirmed against
-# Home Assistant's own official ROMY integration, which shares this protocol.
+# Index == cleaning_parameter_set value on the device. The official ROMY
+# integration's own list has 7 entries (adding "high"/"auto"), but this
+# device's own factory debug UI (its suction_mode <select>, confirmed live
+# on a Series 120 AI) only ever offers 5 - "high"/"auto" apparently don't
+# exist on this firmware. Keep all 5 here so list index always equals the
+# device's cleaning_parameter_set value; SELECTABLE_FAN_SPEEDS below is the
+# narrower list to actually offer as choices.
 FAN_SPEEDS: tuple[str, ...] = (
     "default",
     "normal",
     "silent",
     "intensive",
     "super_silent",
-    "high",
-    "auto",
 )
+
+# The Rowenta app itself only offers 4 speeds - "default" (index 0) is a
+# fallback/internal value, not something a user picks. Confirmed against
+# the live app. A room can still report/use "default" (e.g. before it's
+# been customized); it just isn't offered as a new target.
+SELECTABLE_FAN_SPEEDS: tuple[str, ...] = FAN_SPEEDS[1:]
 
 # get/robot_id's "name" and get/robot_name both report the firmware's
 # internal project codename (e.g. "Madeleine120") when the user has never
