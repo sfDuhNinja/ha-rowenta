@@ -177,6 +177,14 @@ class RowentaClient:
         result = await self._request("get/task_history")
         return result.get("task_history", [])
 
+    async def async_get_rob_pose(self) -> dict[str, Any]:
+        """Current position: {map_id, x1, y1, heading, valid, is_tentative}.
+
+        Confirmed live: stays valid even while docked/idle, not just while
+        the robot is actively moving.
+        """
+        return await self._request("get/rob_pose")
+
     async def async_get_command_result(self) -> list[dict[str, Any]]:
         """Recent command outcomes, as {cmd_id, status, error_code}."""
         result = await self._request("get/command_result")

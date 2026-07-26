@@ -8,7 +8,7 @@ from homeassistant.const import Platform
 DOMAIN = "rowenta"
 LOGGER = logging.getLogger(__package__)
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR, Platform.VACUUM]
-UPDATE_INTERVAL = timedelta(seconds=10)
+UPDATE_INTERVAL = timedelta(seconds=5)
 
 # Index == cleaning_parameter_set value on the device. The device's own
 # factory debug UI labels these 0-4 as Default/Normal/Silent/Intensive/

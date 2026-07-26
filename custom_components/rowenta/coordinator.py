@@ -62,6 +62,7 @@ class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
             areas = await self.client.async_get_areas()
             robot_flags = await self.client.async_get_robot_flags()
             task_history = await self.client.async_get_task_history()
+            pose = await self.client.async_get_rob_pose()
         except RowentaApiError as err:
             raise UpdateFailed(f"Error communicating with Rowenta robot: {err}") from err
 
@@ -83,7 +84,7 @@ class RowentaCoordinator(DataUpdateCoordinator[RowentaData]):
             map_id=areas.get("map_id"),
             robot_flags=robot_flags,
             last_run=_last_cleaning_run(task_history),
-            current_area_id=_current_area_id_from_history(task_history, rooms),
+            current_area_id=_current_area_id_from_pose(pose, rooms),
         )
 
 
@@ -171,7 +172,7 @@ def _build_rooms(areas: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 else label
             )
 
-        result.append({"id": room["id"], "name": name})
+        result.append({"id": room["id"], "name": name, "points": room.get("points", [])})
 
     return result
 
@@ -233,30 +234,43 @@ def _parse_timestamp(value: dict[str, Any] | None) -> datetime | None:
         return None
 
 
-def _current_area_id_from_history(
-    task_history: list[dict[str, Any]], rooms: list[dict[str, Any]]
+def _current_area_id_from_pose(
+    pose: dict[str, Any] | None, rooms: list[dict[str, Any]]
 ) -> int | None:
-    """Segment id currently being cleaned, from the active task's own area_history.
+    """Segment id containing the robot's current physical position.
 
-    Confirmed live: while a task's overall state is "executing", its
-    area_history entries transition pending -> executing -> done/interrupted
-    per room in real time - far more reliable than inferring from position.
-    None while idle/docked, or if the active segment isn't one of ours (e.g.
-    a to_be_cleaned proposal, filtered out of `rooms`).
-
-    Returns the raw segment id rather than a resolved name - the entity
-    resolves it through the user's own HA area mapping instead of our
-    generated segment name (id resolution needs the entity registry, not
-    available here in the coordinator).
+    Confirmed live: get/rob_pose stays valid (valid=true) even while the
+    robot is docked/idle, not just while actively moving - so unlike the
+    task_history-based approach tried first, this reports a room at any
+    time, not only while a clean is actively running.
     """
-    if not task_history or task_history[-1].get("state") != "executing":
+    if not pose or not pose.get("valid"):
         return None
 
-    room_ids = {room["id"] for room in rooms}
-    for area in task_history[-1].get("area_history", []):
-        if area.get("state") == "executing" and area.get("area_id") in room_ids:
-            return area["area_id"]
+    x, y = pose.get("x1"), pose.get("y1")
+    if x is None or y is None:
+        return None
+
+    for room in rooms:
+        if _point_in_polygon(x, y, room.get("points", [])):
+            return room["id"]
 
     return None
 
-    return None
+
+def _point_in_polygon(x: float, y: float, points: list[dict[str, Any]]) -> bool:
+    """Ray-casting point-in-polygon test against a room's boundary points."""
+    inside = False
+    n = len(points)
+    if n < 3:
+        return False
+
+    j = n - 1
+    for i in range(n):
+        xi, yi = points[i]["x"], points[i]["y"]
+        xj, yj = points[j]["x"], points[j]["y"]
+        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+
+    return inside
