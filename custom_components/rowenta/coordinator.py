@@ -140,14 +140,17 @@ def _build_rooms(areas: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     rooms = [area for area in areas if area.get("area_type") == "room"]
 
-    # room_type "none" marks stale/proposed splits the robot has never
+    # Some "room" entries are stale/proposed splits the robot has never
     # actually cleaned (area_state "inactive", cleaning_counter 0, never
     # last_cleaned) rather than real user-facing rooms - the app doesn't
-    # show them either. Keep one only if the user has explicitly named it.
+    # show them either. Filter on actual cleaning history (cleaning_counter
+    # > 0), not room_type: confirmed on a second robot that room_type can
+    # stay "none" even for genuinely real, already-cleaned rooms, which
+    # made an earlier room_type-based filter wrongly drop every real room
+    # for that unit. Keep an uncleaned one only if the user explicitly
+    # named it.
     rooms = [
-        room
-        for room in rooms
-        if room.get("room_type", "none") != "none" or _room_custom_name(room)
+        room for room in rooms if _has_been_cleaned(room) or _room_custom_name(room)
     ]
 
     type_totals: dict[str, int] = {}
@@ -175,6 +178,11 @@ def _build_rooms(areas: list[dict[str, Any]]) -> list[dict[str, Any]]:
         result.append({"id": room["id"], "name": name, "points": room.get("points", [])})
 
     return result
+
+
+def _has_been_cleaned(room: dict[str, Any]) -> bool:
+    """True if the robot has actually cleaned this area at least once."""
+    return room.get("statistics", {}).get("cleaning_counter", 0) > 0
 
 
 def _room_custom_name(room: dict[str, Any]) -> str | None:
