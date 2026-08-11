@@ -31,11 +31,15 @@ COMMAND_POLL_INTERVAL = 1.0
 COMMAND_POLL_ATTEMPTS = 10
 
 # Spacing between retries of a command that was rejected instantly (never
-# reached "executing"). Confirmed live this needs more margin than a single
-# 1s retry in some cases; ~9s of cumulative backoff across 3 tries is a
-# reasonable ceiling for something that should still return in a few
-# seconds, not block indefinitely.
-INSTANT_REJECT_RETRY_DELAYS = (2.0, 3.0, 4.0)
+# reached "executing") - see _execute()'s docstring for what's actually
+# behind this (the robot waking from an idle/power-saving state on an
+# unpredictable delay, up to roughly a minute observed). Worst case here
+# is 2 retries x (delay + 1s poll) plus the initial 1s poll = ~7.5s total,
+# deliberately kept under common HA frontend service-call timeouts
+# (~10s) rather than chasing the long tail, which a retry loop blocking
+# the call can't cover anyway without producing a spurious timeout error
+# on top.
+INSTANT_REJECT_RETRY_DELAYS = (2.0, 3.0)
 
 _TERMINAL_FAILED = ("interrupted", "aborted", "error")
 
@@ -215,20 +219,30 @@ class RowentaClient:
         Confirmed live: sending a command while the robot is still mid-
         transition from a just-interrupted previous command (e.g. a
         clean_map arriving seconds after an interrupted go_home) gets
-        rejected outright - the robot reports it "interrupted" with 0
-        duration, without ever actually starting. Retrying the exact same
-        call moments later succeeds once the robot has settled.
+        rejected outright - the robot reports it "interrupted"/"failed"
+        with 0 duration, without ever actually starting.
 
-        A single 1s retry (the original fix) turned out not to be enough
-        margin every time: confirmed live a case that kept instant-
-        rejecting for several seconds before clearing on its own with no
-        other command in between. INSTANT_REJECT_RETRY_DELAYS gives it a
-        few more, slightly spaced-out chances before giving up - still
-        bounded to a few seconds total, since a service call shouldn't
-        hang indefinitely. A case that takes minutes to clear (also seen
-        live) is beyond what's reasonable to block a service call for;
-        it surfaces as a real error and the user retries manually, same
-        as stopped working here.
+        Root cause, from get/task_history across several real episodes:
+        this isn't about a specific preceding command. One burst was 6
+        instant rejections over 49s with nothing else happening in
+        between; another was the very first command sent after the robot
+        had sat completely idle/docked for 6 days, rejected twice before
+        succeeding minutes later with no intervening action at all. That
+        points to the robot waking from some internal power-saving/idle
+        state before it will accept a movement command, on a delay that
+        isn't predictable or queryable from the API (get/robot_flags
+        shows nothing during it) - anywhere from under a second to
+        roughly a minute observed.
+
+        A retry loop can't reliably bridge a minute-long wake-up without
+        blocking the calling HA service call well past typical frontend
+        timeouts (~10s), which would show a spurious failure anyway while
+        this kept retrying underneath. INSTANT_REJECT_RETRY_DELAYS is
+        deliberately modest - enough to absorb short wake-ups, bounded
+        well under that ceiling - and RowentaApiError's message says so
+        explicitly, since retrying manually from the UI after a couple of
+        seconds (which is what actually worked in every observed case) is
+        the real fix, not something this method can force.
 
         This retry is only attempted for the instant-rejection case; a
         command that fails after having actually started running is a
@@ -242,7 +256,9 @@ class RowentaClient:
             if await self._execute_once(path, params):
                 return
         raise RowentaApiError(
-            f"{path} was rejected immediately, {len(INSTANT_REJECT_RETRY_DELAYS) + 1} times in a row"
+            f"{path} was rejected immediately, "
+            f"{len(INSTANT_REJECT_RETRY_DELAYS) + 1} times in a row. The robot may still be "
+            "waking up from being idle - wait a few seconds and try again."
         )
 
     async def _execute_once(self, path: str, params: dict[str, Any] | None = None) -> bool:
