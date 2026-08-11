@@ -30,6 +30,13 @@ REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=8)
 COMMAND_POLL_INTERVAL = 1.0
 COMMAND_POLL_ATTEMPTS = 10
 
+# Spacing between retries of a command that was rejected instantly (never
+# reached "executing"). Confirmed live this needs more margin than a single
+# 1s retry in some cases; ~9s of cumulative backoff across 3 tries is a
+# reasonable ceiling for something that should still return in a few
+# seconds, not block indefinitely.
+INSTANT_REJECT_RETRY_DELAYS = (2.0, 3.0, 4.0)
+
 _TERMINAL_FAILED = ("interrupted", "aborted", "error")
 
 
@@ -203,25 +210,40 @@ class RowentaClient:
     # -- commands -------------------------------------------------------
 
     async def _execute(self, path: str, params: dict[str, Any] | None = None) -> None:
-        """Fire a set/* command, confirm it, and retry once if instantly rejected.
+        """Fire a set/* command, confirm it, and retry if instantly rejected.
 
         Confirmed live: sending a command while the robot is still mid-
         transition from a just-interrupted previous command (e.g. a
         clean_map arriving seconds after an interrupted go_home) gets
         rejected outright - the robot reports it "interrupted" with 0
         duration, without ever actually starting. Retrying the exact same
-        call moments later succeeds once the robot has settled. That one
-        retry is only attempted for this specific instant-rejection case;
-        a command that fails after having actually started running is a
+        call moments later succeeds once the robot has settled.
+
+        A single 1s retry (the original fix) turned out not to be enough
+        margin every time: confirmed live a case that kept instant-
+        rejecting for several seconds before clearing on its own with no
+        other command in between. INSTANT_REJECT_RETRY_DELAYS gives it a
+        few more, slightly spaced-out chances before giving up - still
+        bounded to a few seconds total, since a service call shouldn't
+        hang indefinitely. A case that takes minutes to clear (also seen
+        live) is beyond what's reasonable to block a service call for;
+        it surfaces as a real error and the user retries manually, same
+        as stopped working here.
+
+        This retry is only attempted for the instant-rejection case; a
+        command that fails after having actually started running is a
         real failure and raises immediately, no retry.
         """
         if await self._execute_once(path, params):
             return
-        _LOGGER.debug("%s rejected instantly, retrying once", path)
-        await asyncio.sleep(COMMAND_POLL_INTERVAL)
-        if await self._execute_once(path, params):
-            return
-        raise RowentaApiError(f"{path} was rejected immediately, twice in a row")
+        for attempt, delay in enumerate(INSTANT_REJECT_RETRY_DELAYS, start=1):
+            _LOGGER.debug("%s rejected instantly, retry %s in %ss", path, attempt, delay)
+            await asyncio.sleep(delay)
+            if await self._execute_once(path, params):
+                return
+        raise RowentaApiError(
+            f"{path} was rejected immediately, {len(INSTANT_REJECT_RETRY_DELAYS) + 1} times in a row"
+        )
 
     async def _execute_once(self, path: str, params: dict[str, Any] | None = None) -> bool:
         """Fire a set/* command and confirm the robot actually accepted it.
